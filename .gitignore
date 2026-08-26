@@ -1,0 +1,19 @@
+# Go
+/bin/
+*.exe
+*.test
+*.out
+
+# env / secrets
+.env
+*.local
+
+# IDE
+.idea/
+.vscode/
+
+# Docker
+*.log
+
+# vendor (если не коммитим)
+# vendor/
