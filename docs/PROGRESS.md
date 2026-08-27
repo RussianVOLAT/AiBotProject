@@ -7,10 +7,10 @@
 - [x] Стартовые docs/ и структура репозитория
 
 ## В работе (Этап 0 — инфраструктура)
-- [ ] Создать GitHub-репозиторий, сделать первый коммит
-- [ ] Настроить 3 Project'а в Claude по ролям, приложить docs/ как knowledge base
-- [ ] Скелет модулей: `cmd/`, `internal/{collector,api,bot,aigateway,storage}`
-- [ ] `docker-compose.yml` с Postgres
+- [x] Создать GitHub-репозиторий, сделать первый коммит
+- [x] Настроить 3 Project'а в Claude по ролям, приложить docs/ как knowledge base
+- [x] Скелет модулей: `cmd/`, `internal/{collector,api,bot,aigateway,storage}`
+- [x] `docker-compose.yml` с Postgres
 
 ## Следующее (Этап 1 — ядро)
 - [ ] Collector: опрос внешнего API раз в 5 мин для BTC/ETH → запись в Postgres
