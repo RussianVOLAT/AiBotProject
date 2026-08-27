@@ -1,4 +1,4 @@
-# crypto-rates-service
+# AiBotProject
 
 Сервис курсов криптовалют: сбор курсов BTC/ETH по расписанию, REST API,
 Telegram-бот, и слой NL-ответов/алертов поверх локальной LLM.
