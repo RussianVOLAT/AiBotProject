@@ -35,7 +35,8 @@ CREATE TABLE subscriptions (
     user_id           BIGINT PRIMARY KEY,
     interval_minutes  INT NOT NULL,
     active            BOOLEAN NOT NULL DEFAULT true,
-    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_sent_at      TIMESTAMPTZ
 );
 ```
 

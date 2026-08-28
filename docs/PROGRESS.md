@@ -12,12 +12,12 @@
 - [x] Скелет модулей: `cmd/`, `internal/{collector,api,bot,aigateway,storage}`
 - [x] `docker-compose.yml` с Postgres
 
-## Следующее (Этап 1 — ядро)
-- [ ] Collector: опрос внешнего API раз в 5 мин для BTC/ETH → запись в Postgres
-- [ ] Таблицы `rates`, миграции
+## В работе (Этап 1 — ядро)
+- [x] Collector: опрос внешнего API раз в 5 мин для BTC/ETH → запись в Postgres
+- [x] Таблицы `rates`, миграции
 - [ ] `GET /rates`
 - [ ] `GET /rates/{currency}` с min/max за день и % за час
-- [ ] Юнит-тесты на логику min/max/% изменения
+- [x] Юнит-тесты на логику min/max/% изменения
 
 ## Дальше по плану (не начато)
 - [ ] Этап 2: Telegram-бот, таблица подписок, автопуш
