@@ -15,8 +15,8 @@
 ## В работе (Этап 1 — ядро)
 - [x] Collector: опрос внешнего API раз в 5 мин для BTC/ETH → запись в Postgres
 - [x] Таблицы `rates`, миграции
-- [ ] `GET /rates`
-- [ ] `GET /rates/{currency}` с min/max за день и % за час
+- [x] `GET /rates`
+- [x] `GET /rates/{currency}` с min/max за день и % за час
 - [x] Юнит-тесты на логику min/max/% изменения
 
 ## Дальше по плану (не начато)
