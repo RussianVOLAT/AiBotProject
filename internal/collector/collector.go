@@ -4,19 +4,28 @@ import (
 	"context"
 	"log"
 	"time"
+
+	"github.com/RussianVOLAT/AiBotProject/internal/domain"
 )
 
+// RateInserter минимальный интерфейс, который нужен collectorу от storage.
 type RateInserter interface {
-	InsertRate(ctx context.Context, currency string, price float64) error
+	InsertRate(ctx context.Context, currency domain.Currency, price float64) error
 }
 
-// PriceFetcher — интерфейс над источником цен. В проде это будет
-// *BinanceClient, в тестах — фейк без реальных HTTP-запросов.
+// PriceFetcher интерфейс над источником цен. Коллектору всё равно,
+// откуда берутся цены, реализацию (internal/binance.Client) собираем
+// снаружи, в main, и передаём сюда через New.
 type PriceFetcher interface {
 	FetchPrice(ctx context.Context, symbol string) (float64, error)
 }
 
-var symbolMap = map[string]string{
+// symbolMap какие торговые пары источника опрашиваем и в какую domain.Currency
+// они превращаются. domain.Currency("BTC") тут собирается напрямую из
+// строкового литерала, а не через NewCurrency: значения известны на этапе
+// компиляции и заведомо проходят валидацию, вызывать конструктор ради
+// констант избыточно.
+var symbolMap = map[string]domain.Currency{
 	"BTCUSDT": "BTC",
 	"ETHUSDT": "ETH",
 }
@@ -36,19 +45,11 @@ func New(fetcher PriceFetcher, storage RateInserter, interval time.Duration) *Co
 	}
 }
 
-// Run запускает бесконечный цикл опроса. Блокирующий вызов —
-// предполагается запуск в отдельной горутине из main (go collector.Run(ctx)).
-// Останавливается по отмене ctx — это и есть механизм graceful shutdown:
-// main при получении SIGTERM отменяет общий ctx, и все горутины,
-// слушающие ctx.Done(), сами аккуратно завершаются.
 func (c *Collector) Run(ctx context.Context) {
-	// Первый опрос — сразу при старте, не дожидаясь первого тика.
-	// Без этого первые 5 минут работы сервиса в БД не будет вообще ничего,
-	// а time.NewTicker свой первый сигнал шлёт только через interval.
 	c.collectOnce(ctx)
 
 	ticker := time.NewTicker(c.interval)
-	defer ticker.Stop() // иначе тикер продолжит жить и после Run — утечка горутины/таймера
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -61,10 +62,6 @@ func (c *Collector) Run(ctx context.Context) {
 	}
 }
 
-// collectOnce — один проход по всем отслеживаемым валютам.
-// Ошибка по одной валюте не должна останавливать сбор остальных —
-// поэтому ошибки логируем и продолжаем (continue), а не делаем return
-// из всей функции при первой же неудаче.
 func (c *Collector) collectOnce(ctx context.Context) {
 	for symbol, currency := range symbolMap {
 		price, err := c.fetcher.FetchPrice(ctx, symbol)

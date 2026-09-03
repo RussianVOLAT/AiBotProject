@@ -1,4 +1,4 @@
-package collector
+package binance
 
 import (
 	"context"
@@ -9,22 +9,19 @@ import (
 	"time"
 )
 
-const defaultBinanceBaseURL = "https://api.binance.com"
+const defaultBaseURL = "https://api.binance.com"
 
-// BinanceClient — тонкий клиент к публичному Binance REST API.
-// Публичные эндпойнты (в отличие от приватных, торговых) не требуют
-// ключа и подписи запроса — то, ради чего его и выбрали в DECISIONS.md.
-type BinanceClient struct {
+// Client клиент к публичным (не требующим ключа) эндпойнтам Binance.
+type Client struct {
 	httpClient *http.Client
-	baseURL    string // не экспортируем наружу, но меняем в тестах через тот же пакет
+	baseURL    string
 }
 
-// NewBinanceClient создаёт клиент с разумным таймаутом.
-// а зависший внешний сервис уронит весь collector в вечное ожидание.
-func NewBinanceClient() *BinanceClient {
-	return &BinanceClient{
+// New создаёт клиент с разумным таймаутом на HTTP-запросы.
+func New() *Client {
+	return &Client{
 		httpClient: &http.Client{Timeout: 10 * time.Second},
-		baseURL:    defaultBinanceBaseURL,
+		baseURL:    defaultBaseURL,
 	}
 }
 
@@ -38,7 +35,7 @@ type tickerPriceResponse struct {
 }
 
 // FetchPrice возвращает текущую цену для торговой пары, например "BTCUSDT".
-func (c *BinanceClient) FetchPrice(ctx context.Context, symbol string) (float64, error) {
+func (c *Client) FetchPrice(ctx context.Context, symbol string) (float64, error) {
 	url := fmt.Sprintf("%s/api/v3/ticker/price?symbol=%s", c.baseURL, symbol)
 
 	// NewRequestWithContext, а не http.Get — так ctx.Done() (например,

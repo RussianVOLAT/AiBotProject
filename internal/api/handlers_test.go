@@ -5,55 +5,39 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
-
+	"github.com/RussianVOLAT/AiBotProject/internal/domain"
 	"github.com/RussianVOLAT/AiBotProject/internal/storage"
 )
 
-// fakeStore  тестовая замена RatesReader, без реальной БД.
-// Через неё же удобно проверять "плохие" пути (ошибка, not found),
-// которые на живой БД пришлось бы отдельно подстраивать.
 type fakeStore struct {
-	rates     []storage.Rate
-	stats     *storage.RateStats
+	rates     []domain.Rate
+	stats     *domain.RateStats
 	statsErr  error
 	latestErr error
 }
 
-func (f *fakeStore) GetLatestRates(ctx context.Context) ([]storage.Rate, error) {
+func (f *fakeStore) GetLatestRates(ctx context.Context) ([]domain.Rate, error) {
 	return f.rates, f.latestErr
 }
 
-func (f *fakeStore) GetRateStats(ctx context.Context, currency string) (*storage.RateStats, error) {
+func (f *fakeStore) GetRateStats(ctx context.Context, currency domain.Currency) (*domain.RateStats, error) {
 	return f.stats, f.statsErr
 }
 
-// numericFromFloat  маленький хелпер, чтобы собрать pgtype.Numeric
-// в тестовых данных так же, как это делает pgx при чтении из реальной БД.
-func numericFromFloat(t *testing.T, v float64) pgtype.Numeric {
-	t.Helper()
-	var n pgtype.Numeric
-	if err := n.Scan(strconv.FormatFloat(v, 'f', -1, 64)); err != nil {
-		t.Fatalf("build numeric: %v", err)
-	}
-	return n
-}
 func TestGetRates(t *testing.T) {
 	store := &fakeStore{
-		rates: []storage.Rate{
-			{Currency: "BTC", PriceUSD: numericFromFloat(t, 65000), FetchedAt: time.Now()},
-			{Currency: "ETH", PriceUSD: numericFromFloat(t, 3200), FetchedAt: time.Now()},
+		rates: []domain.Rate{
+			{Currency: "BTC", PriceUSD: 65000, FetchedAt: time.Now()},
+			{Currency: "ETH", PriceUSD: 3200, FetchedAt: time.Now()},
 		},
 	}
 	h := NewHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/rates", nil)
 	rec := httptest.NewRecorder()
-
 	h.GetRates(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -75,7 +59,6 @@ func TestGetRates_Empty(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/rates", nil)
 	rec := httptest.NewRecorder()
-
 	h.GetRates(rec, req)
 
 	if got := rec.Body.String(); got != "[]\n" {
@@ -86,7 +69,7 @@ func TestGetRates_Empty(t *testing.T) {
 func TestGetRateByCurrency_Found(t *testing.T) {
 	change := 1.5
 	store := &fakeStore{
-		stats: &storage.RateStats{
+		stats: &domain.RateStats{
 			Currency:        "BTC",
 			PriceUSD:        65000,
 			MinUSD24h:       64000,
@@ -100,7 +83,6 @@ func TestGetRateByCurrency_Found(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/rates/BTC", nil)
 	rec := httptest.NewRecorder()
-
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -126,10 +108,26 @@ func TestGetRateByCurrency_NotFound(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/rates/DOGE", nil)
 	rec := httptest.NewRecorder()
-
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
+	}
+}
+
+// Новый тест: невалидный код валюты должен отсекаться на границе HTTP
+// (400), даже не доходя до storage это то поведение, которое мы
+// добавили в GetRateByCurrency через domain.NewCurrency.
+func TestGetRateByCurrency_InvalidCurrency(t *testing.T) {
+	store := &fakeStore{}
+	h := NewHandler(store)
+	router := NewRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/rates/123", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
 	}
 }

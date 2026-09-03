@@ -1,4 +1,4 @@
-package collector
+package binance
 
 import (
 	"context"
@@ -7,10 +7,7 @@ import (
 	"testing"
 )
 
-// httptest.NewServer поднимает настоящий локальный HTTP-сервер на случайном
-// порту — так тестируем реальный сетевой код (парсинг URL, JSON, статусы),
-// но без похода в интернет к настоящему Binance.
-func TestBinanceClient_FetchPrice(t *testing.T) {
+func TestClient_FetchPrice(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("symbol"); got != "BTCUSDT" {
 			t.Errorf("unexpected symbol in request: %s", got)
@@ -20,8 +17,8 @@ func TestBinanceClient_FetchPrice(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewBinanceClient()
-	client.baseURL = server.URL // подменяем реальный Binance на тестовый сервер
+	client := New()
+	client.baseURL = server.URL
 
 	price, err := client.FetchPrice(context.Background(), "BTCUSDT")
 	if err != nil {
@@ -32,13 +29,13 @@ func TestBinanceClient_FetchPrice(t *testing.T) {
 	}
 }
 
-func TestBinanceClient_FetchPrice_ErrorStatus(t *testing.T) {
+func TestClient_FetchPrice_ErrorStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusTooManyRequests) // симулируем rate limit от Binance
+		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer server.Close()
 
-	client := NewBinanceClient()
+	client := New()
 	client.baseURL = server.URL
 
 	_, err := client.FetchPrice(context.Background(), "BTCUSDT")
