@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/RussianVOLAT/AiBotProject/internal/domain"
 	"github.com/RussianVOLAT/AiBotProject/internal/storage"
 )
 
-// RatesReader минимальный интерфейс, который нужен api от storage.
 type RatesReader interface {
 	GetLatestRates(ctx context.Context) ([]domain.Rate, error)
 	GetRateStats(ctx context.Context, currency domain.Currency) (*domain.RateStats, error)
@@ -19,16 +18,20 @@ type RatesReader interface {
 
 type Handler struct {
 	store RatesReader
+	log   *slog.Logger
 }
 
-func NewHandler(store RatesReader) *Handler {
-	return &Handler{store: store}
+func NewHandler(store RatesReader, logger *slog.Logger) *Handler {
+	return &Handler{
+		store: store,
+		log:   logger.With("component", "api"),
+	}
 }
 
 func (h *Handler) GetRates(w http.ResponseWriter, r *http.Request) {
 	rates, err := h.store.GetLatestRates(r.Context())
 	if err != nil {
-		log.Printf("api: get latest rates: %v", err)
+		h.log.Error("get latest rates failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -48,9 +51,6 @@ func (h *Handler) GetRates(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetRateByCurrency(w http.ResponseWriter, r *http.Request) {
 	currency, err := domain.NewCurrency(r.PathValue("currency"))
 	if err != nil {
-		// Валидация происходит прямо на границе HTTP если код валюты
-		// в URL не проходит по формату domain.Currency, дальше в storage
-		// он даже не уйдёт, вернём понятную ошибку клиенту сразу.
 		writeError(w, http.StatusBadRequest, "invalid currency code")
 		return
 	}
@@ -61,7 +61,7 @@ func (h *Handler) GetRateByCurrency(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("api: get rate stats for %s: %v", currency, err)
+		h.log.Error("get rate stats failed", "currency", currency, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -78,11 +78,16 @@ func (h *Handler) GetRateByCurrency(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// writeJSON и writeError логируют через стандартный log единственное
+// исключение: эти функции пакетные (не методы Handler), у них нет доступа
+// к h.log. Можно было бы сделать их методами, но это раздуло бы сигнатуру
+// без реальной необходимости — ошибка кодирования JSON здесь крайне редкий
+// случай (по сути, только если сама структура ответа не сериализуется).
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Printf("api: encode response: %v", err)
+		slog.Error("api: encode response failed", "error", err)
 	}
 }
 

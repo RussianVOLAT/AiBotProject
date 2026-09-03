@@ -2,7 +2,7 @@ package collector
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/RussianVOLAT/AiBotProject/internal/domain"
@@ -35,13 +35,15 @@ type Collector struct {
 	fetcher  PriceFetcher
 	storage  RateInserter
 	interval time.Duration
+	log      *slog.Logger
 }
 
-func New(fetcher PriceFetcher, storage RateInserter, interval time.Duration) *Collector {
+func New(fetcher PriceFetcher, storage RateInserter, interval time.Duration, logger *slog.Logger) *Collector {
 	return &Collector{
 		fetcher:  fetcher,
 		storage:  storage,
 		interval: interval,
+		log:      logger.With("component", "collector"), // добавляет поле component ко всем логам этого экземпляра
 	}
 }
 
@@ -54,7 +56,7 @@ func (c *Collector) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("collector: stopping (context cancelled)")
+			c.log.Info("stopping, context cancelled")
 			return
 		case <-ticker.C:
 			c.collectOnce(ctx)
@@ -66,15 +68,15 @@ func (c *Collector) collectOnce(ctx context.Context) {
 	for symbol, currency := range symbolMap {
 		price, err := c.fetcher.FetchPrice(ctx, symbol)
 		if err != nil {
-			log.Printf("collector: fetch %s failed: %v", symbol, err)
+			c.log.Error("fetch failed", "symbol", symbol, "error", err)
 			continue
 		}
 
 		if err := c.storage.InsertRate(ctx, currency, price); err != nil {
-			log.Printf("collector: insert rate %s failed: %v", currency, err)
+			c.log.Error("insert rate failed", "currency", currency, "error", err)
 			continue
 		}
 
-		log.Printf("collector: saved %s = %.2f USD", currency, price)
+		c.log.Info("saved rate", "currency", currency, "price_usd", price)
 	}
 }

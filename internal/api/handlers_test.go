@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +13,10 @@ import (
 	"github.com/RussianVOLAT/AiBotProject/internal/domain"
 	"github.com/RussianVOLAT/AiBotProject/internal/storage"
 )
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 type fakeStore struct {
 	rates     []domain.Rate
@@ -34,7 +40,7 @@ func TestGetRates(t *testing.T) {
 			{Currency: "ETH", PriceUSD: 3200, FetchedAt: time.Now()},
 		},
 	}
-	h := NewHandler(store)
+	h := NewHandler(store, testLogger())
 
 	req := httptest.NewRequest(http.MethodGet, "/rates", nil)
 	rec := httptest.NewRecorder()
@@ -55,7 +61,7 @@ func TestGetRates(t *testing.T) {
 
 func TestGetRates_Empty(t *testing.T) {
 	store := &fakeStore{rates: nil}
-	h := NewHandler(store)
+	h := NewHandler(store, testLogger())
 
 	req := httptest.NewRequest(http.MethodGet, "/rates", nil)
 	rec := httptest.NewRecorder()
@@ -78,7 +84,7 @@ func TestGetRateByCurrency_Found(t *testing.T) {
 			ChangePercent1h: &change,
 		},
 	}
-	h := NewHandler(store)
+	h := NewHandler(store, testLogger())
 	router := NewRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/rates/BTC", nil)
@@ -103,7 +109,7 @@ func TestGetRateByCurrency_Found(t *testing.T) {
 
 func TestGetRateByCurrency_NotFound(t *testing.T) {
 	store := &fakeStore{statsErr: storage.ErrNotFound}
-	h := NewHandler(store)
+	h := NewHandler(store, testLogger())
 	router := NewRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/rates/DOGE", nil)
@@ -120,7 +126,7 @@ func TestGetRateByCurrency_NotFound(t *testing.T) {
 // добавили в GetRateByCurrency через domain.NewCurrency.
 func TestGetRateByCurrency_InvalidCurrency(t *testing.T) {
 	store := &fakeStore{}
-	h := NewHandler(store)
+	h := NewHandler(store, testLogger())
 	router := NewRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/rates/123", nil)

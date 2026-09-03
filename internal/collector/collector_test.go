@@ -3,12 +3,21 @@ package collector
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/RussianVOLAT/AiBotProject/internal/domain"
 )
+
+// testLogger логгер для тестов, который никуда не пишет вывод.
+// Не хотим засорять вывод go test логами приложения тесты и так
+// показывают через t.Log/t.Error всё, что нужно для диагностики.
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 type fakeFetcher struct {
 	mu     sync.Mutex
@@ -48,7 +57,7 @@ func TestCollectOnce_SavesAllCurrencies(t *testing.T) {
 	fetcher := &fakeFetcher{prices: map[string]float64{"BTCUSDT": 65000, "ETHUSDT": 3200}}
 	storage := &fakeStorage{}
 
-	c := New(fetcher, storage, time.Minute)
+	c := New(fetcher, storage, time.Minute, testLogger())
 	c.collectOnce(context.Background())
 
 	storage.mu.Lock()
@@ -69,7 +78,7 @@ func TestCollectOnce_ContinuesAfterFetchError(t *testing.T) {
 	}
 	storage := &fakeStorage{}
 
-	c := New(fetcher, storage, time.Minute)
+	c := New(fetcher, storage, time.Minute, testLogger())
 	c.collectOnce(context.Background())
 
 	storage.mu.Lock()
@@ -87,7 +96,7 @@ func TestCollectOnce_ContinuesAfterInsertError(t *testing.T) {
 	fetcher := &fakeFetcher{prices: map[string]float64{"BTCUSDT": 65000, "ETHUSDT": 3200}}
 	storage := &fakeStorage{failOn: map[domain.Currency]bool{"BTC": true}}
 
-	c := New(fetcher, storage, time.Minute)
+	c := New(fetcher, storage, time.Minute, testLogger())
 	c.collectOnce(context.Background())
 
 	storage.mu.Lock()

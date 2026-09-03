@@ -19,6 +19,20 @@
 - [x] `GET /rates/{currency}` с min/max за день и % за час
 - [x] Юнит-тесты на логику min/max/% изменения
 
+## Готово (пост-ревью рефакторинг этапа 1)
+- [x] `cmd/server/main.go`: единая точка входа, конструкторы вызываются в main,
+      graceful shutdown по SIGINT/SIGTERM
+- [x] `internal/domain`: доменные сущности `Currency`/`Rate`/`RateStats`,
+      storage/collector/api переведены на них вместо разрозненных
+      DTO/db-моделей
+- [x] `internal/binance` вынесен из `collector` в отдельный пакет —
+      источник цен и бизнес-логика сбора разделены, связь через интерфейс
+- [x] Логирование: `log` → `slog`, структурированный JSON-вывод
+- [x] `Dockerfile` (multi-stage) + сервис `app` в `docker-compose.yml`,
+      весь стек поднимается одной командой `docker compose up`
+- [x] Проверено end-to-end: контейнеры `postgres`+`app`, collector реально
+      пишет курсы в БД, API их отдаёт
+
 ## Дальше по плану (не начато)
 - [ ] Этап 2: Telegram-бот, таблица подписок, автопуш
 - [ ] Этап 3: aigateway (Ollama), NL-запросы, алерты по z-score

@@ -11,6 +11,30 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # healthcheck нужен, чтобы app дожидался реальной готовности Postgres
+    # принимать соединения, а не просто факта, что контейнер запустился —
+    # Postgres какое-то время инициализируется даже после старта процесса.
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U appuser -d crypto_rates" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: crypto-rates-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # postgres — имя сервиса из compose, Docker сам резолвит его
+      # в IP контейнера через встроенный DNS; localhost тут работать
+      # не будет, потому что app и postgres — разные контейнеры.
+      DATABASE_URL: "postgres://appuser:devpassword@postgres:5432/crypto_rates?sslmode=disable"
+      HTTP_ADDR: ":8080"
+    ports:
+      - "8080:8080"
 
 volumes:
   pgdata:
