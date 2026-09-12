@@ -3,7 +3,7 @@
 //
 // По аналогии с internal/collector (который не знает про Binance напрямую,
 // а работает через свой интерфейс PriceFetcher), bot не завязан на
-// конкретный *storage.Storage — он объявляет два узких интерфейса под свои
+// конкретный *storage.Storage он объявляет два узких интерфейса под свои
 // нужды (RatesStore, SubscriptionStore), которые *storage.Storage
 // удовлетворяет "случайно", просто имея нужные методы. Это позволяет
 // в тестах подставить фейковую реализацию без поднятия Postgres.
@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	tgbot "github.com/go-telegram/bot"
@@ -46,6 +47,17 @@ type Bot struct {
 	// schedInterval вынесен в поле (а не хардкод в коде шедулера), чтобы
 	// в тестах можно было подставить маленький интервал вместо реальной минуты.
 	schedInterval time.Duration
+
+	// screenMu/lastScreen трекинг "текущего экрана" на каждый чат для
+	// навигации по меню (см. showScreen ниже). Осознанно ТОЛЬКО в памяти,
+	// не в БД: это чисто UX-состояние навигации, а не бизнес-данные
+	// в отличие от subscriptions.last_message_id (который переживает
+	// рестарт контейнера и обязан быть в БД, потому что автопуш работает
+	// по расписанию, а не по живому диалогу). Если бот перезапустится,
+	// следующее нажатие/команда просто отправит новое сообщение вместо
+	// правки старого не баг, а осознанный компромисс простоты.
+	screenMu   sync.Mutex
+	lastScreen map[int64]int // chatID -> ID последнего "экранного" сообщения бота
 }
 
 // New создаёт Bot и регистрирует обработчики команд.
@@ -57,13 +69,13 @@ func New(token string, rates RatesStore, subs SubscriptionStore, logger *slog.Lo
 		subs:          subs,
 		logger:        logger,
 		schedInterval: time.Minute,
+		lastScreen:    make(map[int64]int),
 	}
 
 	opts := []tgbot.Option{
-		// DefaultHandler ловит всё, что не подошло ни под одну команду —
+		// DefaultHandler ловит всё, что не подошло ни под одну команду
 		// нужен, чтобы бот не молчал на "непонятный текст", а объяснял,
-		// что умеет (в частности — на free-text NL-запросы до появления
-		// aigateway в Этапе 3).
+		// что умеет.
 		tgbot.WithDefaultHandler(b.handleUnknown),
 	}
 
@@ -79,9 +91,6 @@ func New(token string, rates RatesStore, subs SubscriptionStore, logger *slog.Lo
 
 // Run запускает бота: фоновый шедулер автопуша в отдельной горутине и
 // long polling, который блокирует текущую горутину до отмены ctx.
-// Вызывающая сторона (main.go) должна звать Run в своей горутине, как
-// уже сделано для collector.Run и http.Server, и передавать общий ctx,
-// отменяемый по SIGINT/SIGTERM (см. ADR про cmd/server/main.go).
 func (b *Bot) Run(ctx context.Context) {
 	go b.runScheduler(ctx)
 
@@ -90,15 +99,62 @@ func (b *Bot) Run(ctx context.Context) {
 	b.tg.Start(ctx)
 }
 
-// send маленькая обёртка вокруг SendMessage, чтобы не тащить
-// tgbot.SendMessageParams в каждый хендлер и в шедулер по отдельности.
+// send маленькая обёртка вокруг SendMessage без клавиатуры. Используется
+// только автопушем (scheduler.go), у которого своё собственное отслеживание
+// "последнего сообщения" через subscriptions.last_message_id в БД ему
+// showScreen не подходит (это два независимых механизма, см. комментарий
+// у lastScreen выше).
 func (b *Bot) send(ctx context.Context, chatID int64, text string) (*models.Message, error) {
+	return b.sendWithKeyboard(ctx, chatID, text, nil)
+}
+
+// sendWithKeyboard как send, но с необязательной inline-клавиатурой.
+func (b *Bot) sendWithKeyboard(ctx context.Context, chatID int64, text string, markup models.ReplyMarkup) (*models.Message, error) {
 	msg, err := b.tg.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text:   text,
+		ChatID:      chatID,
+		Text:        text,
+		ReplyMarkup: markup,
 	})
 	if err != nil {
 		return nil, err // ошибку не оборачиваем вызывающий код проверяет errors.Is(err, tgbot.ErrorForbidden)
 	}
 	return msg, nil
+}
+
+// showScreen единая точка вывода для интерактивного диалога (команды +
+// кнопки). Вместо того чтобы каждый раз слать новое сообщение (то самое
+// "плачевно" из переписки десяток сообщений подряд), редактирует то же
+// сообщение, что показывали этому чату в прошлый раз, и только если
+// редактирование не удалось (первое сообщение в диалоге, старое сообщение
+// удалено пользователем и т.п.) отправляет новое и запоминает его ID.
+func (b *Bot) showScreen(ctx context.Context, chatID int64, text string, markup models.ReplyMarkup) {
+	b.screenMu.Lock()
+	prevID, ok := b.lastScreen[chatID]
+	b.screenMu.Unlock()
+
+	if ok {
+		_, err := b.tg.EditMessageText(ctx, &tgbot.EditMessageTextParams{
+			ChatID:      chatID,
+			MessageID:   prevID,
+			Text:        text,
+			ReplyMarkup: markup,
+		})
+		if err == nil {
+			return
+		}
+		// Не фатально: сообщение могло устареть, быть удалено пользователем,
+		// или Telegram вернул "message is not modified" (текст не изменился)
+		// в любом из этих случаев просто шлём новое сообщение ниже.
+		b.logger.Warn("bot: edit screen failed, sending new message", "user_id", chatID, "err", err)
+	}
+
+	msg, err := b.sendWithKeyboard(ctx, chatID, text, markup)
+	if err != nil {
+		b.logger.Error("bot: send screen failed", "user_id", chatID, "err", err)
+		return
+	}
+
+	b.screenMu.Lock()
+	b.lastScreen[chatID] = msg.ID
+	b.screenMu.Unlock()
 }
