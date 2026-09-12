@@ -81,7 +81,7 @@ func (h *Handler) GetRateByCurrency(w http.ResponseWriter, r *http.Request) {
 // writeJSON и writeError логируют через стандартный log единственное
 // исключение: эти функции пакетные (не методы Handler), у них нет доступа
 // к h.log. Можно было бы сделать их методами, но это раздуло бы сигнатуру
-// без реальной необходимости — ошибка кодирования JSON здесь крайне редкий
+// без реальной необходимости ошибка кодирования JSON здесь крайне редкий
 // случай (по сути, только если сама структура ответа не сериализуется).
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")

@@ -25,8 +25,8 @@ func New() *Client {
 	}
 }
 
-// tickerPriceResponse — форма ответа Binance на /api/v3/ticker/price.
-// Price — строка, не число! Поэтому парсим
+// tickerPriceResponse форма ответа Binance на /api/v3/ticker/price.
+// Price строка, не число! Поэтому парсим
 // вручную через strconv.ParseFloat, а не даём encoding/json самому
 // распарсить это как float64.
 type tickerPriceResponse struct {
@@ -38,7 +38,7 @@ type tickerPriceResponse struct {
 func (c *Client) FetchPrice(ctx context.Context, symbol string) (float64, error) {
 	url := fmt.Sprintf("%s/api/v3/ticker/price?symbol=%s", c.baseURL, symbol)
 
-	// NewRequestWithContext, а не http.Get — так ctx.Done() (например,
+	// NewRequestWithContext, а не http.Get так ctx.Done() (например,
 	// отмена при shutdown приложения) реально прервёт запрос, а не будет
 	// проигнорирован.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
