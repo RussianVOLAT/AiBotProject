@@ -31,6 +31,7 @@ services:
       # postgres — имя сервиса из compose, Docker сам резолвит его
       # в IP контейнера через встроенный DNS; localhost тут работать
       # не будет, потому что app и postgres — разные контейнеры.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       DATABASE_URL: "postgres://appuser:devpassword@postgres:5432/crypto_rates?sslmode=disable"
       HTTP_ADDR: ":8080"
     ports:

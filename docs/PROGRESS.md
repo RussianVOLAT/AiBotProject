@@ -33,8 +33,20 @@
 - [x] Проверено end-to-end: контейнеры `postgres`+`app`, collector реально
       пишет курсы в БД, API их отдаёт
 
-## Дальше по плану (не начато)
-- [ ] Этап 2: Telegram-бот, таблица подписок, автопуш
+## Готово (Этап 2 — Telegram-бот, текстовые команды)
+- [x] Миграция `subscriptions` (up/down), индекс под запрос шедулера
+- [x] `internal/bot`: команды `/start`, `/rates`, `/rates {currency}`,
+      `/start-auto {minutes}`, `/stop-auto`
+- [x] Шедулер автопуша: sendMessage → MarkSent → best-effort deleteMessage,
+      обработка 403 (деактивация подписки)
+- [x] Wiring в `cmd/server/main.go`
+- [x] Ручная проверка end-to-end через `docker compose up` + тестовый бот
+
+## В работе / не начато
+- [ ] Автопуш: полная статистика (min/max, % за час) вместо голой цены
+- [ ] Inline-кнопки как UI поверх текстовых команд
+- [ ] Тесты: юнит на `domain.Subscription.IsDue`, интеграционный на
+      `storage.DueSubscriptions`
 - [ ] Этап 3: aigateway (Ollama), NL-запросы, алерты по z-score
 - [ ] Этап 4: вынос aigateway в отдельный контейнер
 - [ ] Этап 5: CI/CD, OpenAPI, README, диаграмма архитектуры

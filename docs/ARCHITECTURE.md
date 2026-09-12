@@ -36,7 +36,8 @@ CREATE TABLE subscriptions (
     interval_minutes  INT NOT NULL,
     active            BOOLEAN NOT NULL DEFAULT true,
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_sent_at      TIMESTAMPTZ
+    last_sent_at      TIMESTAMPTZ,
+    last_message_id   INT
 );
 ```
 

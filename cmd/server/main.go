@@ -12,6 +12,7 @@ import (
 
 	"github.com/RussianVOLAT/AiBotProject/internal/api"
 	"github.com/RussianVOLAT/AiBotProject/internal/binance"
+	"github.com/RussianVOLAT/AiBotProject/internal/bot"
 	"github.com/RussianVOLAT/AiBotProject/internal/collector"
 	"github.com/RussianVOLAT/AiBotProject/internal/storage"
 )
@@ -23,6 +24,7 @@ type config struct {
 	databaseURL     string
 	httpAddr        string
 	collectInterval time.Duration
+	telegramToken   string
 }
 
 // loadConfig читает конфиг из окружения, подставляя разумные дефолты
@@ -32,6 +34,7 @@ func loadConfig() config {
 		databaseURL:     getEnv("DATABASE_URL", "postgres://appuser:devpassword@localhost:5432/crypto_rates?sslmode=disable"),
 		httpAddr:        getEnv("HTTP_ADDR", ":8080"),
 		collectInterval: 5 * time.Minute,
+		telegramToken:   getEnv("TELEGRAM_BOT_TOKEN", ""),
 	}
 }
 
@@ -76,6 +79,16 @@ func run(logger *slog.Logger) error {
 
 	priceFetcher := binance.New()
 	coll := collector.New(priceFetcher, st, cfg.collectInterval, logger)
+	if cfg.telegramToken == "" {
+		return errors.New("TELEGRAM_BOT_TOKEN is required")
+	}
+	// bot.New сам делает getMe с таймаутом 5с внутри библиотеки — если
+	// токен неверный, узнаём об этом здесь же, синхронно, а не через
+	// errCh из фоновой горутины (в отличие от HTTP-сервера ниже).
+	tgBot, err := bot.New(cfg.telegramToken, st, st, logger)
+	if err != nil {
+		return err
+	}
 
 	handler := api.NewHandler(st, logger)
 	router := api.NewRouter(handler)
@@ -106,6 +119,12 @@ func run(logger *slog.Logger) error {
 			// отфильтровать, иначе graceful shutdown выглядел бы как сбой.
 			errCh <- err
 		}
+	}()
+
+	// Горутина 3: Telegram-бот (команды + фоновый шедулер автопуша внутри).
+	go func() {
+		logger.Info("starting telegram bot")
+		tgBot.Run(ctx)
 	}()
 
 	select {
